@@ -5,5 +5,9 @@
 
 - [x] Make a store test file
 
-- [ ] Add default opts to store, if not provided by caller.
-- [ ] Add root folder so that all data is stored in some good place with some default folder.
+- [x] Add default opts to store, if not provided by caller.
+- [x] Add root folder so that all data is stored in some good place with some default folder.
+
+- [x] Add loop method on file server which loops and takes values from the message ch
+- [x] Add a quitch (quit channel) which will stop the transport
+- [x] Add a close method on the transport interface
