@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"sync"
 
 	"github.com/codezera11/foreverstore/p2p"
 )
@@ -10,12 +12,16 @@ type FileServerOpts struct {
 	PathTransformFunc PathTransformFunc
 	Transport         p2p.Transport
 	StorageRoot       string
+	BootstrapNodes    []string
 }
 
 type FileServer struct {
 	FileServerOpts
-	store  *Store
-	quitch chan struct{}
+
+	peerLock sync.Mutex
+	peers    map[string]p2p.Peer
+	store    *Store
+	quitch   chan struct{}
 }
 
 func NewServer(opts FileServerOpts) *FileServer {
@@ -29,6 +35,7 @@ func NewServer(opts FileServerOpts) *FileServer {
 		store:          NewStore(storeOpts),
 		FileServerOpts: opts,
 		quitch:         make(chan struct{}),
+		peers:          make(map[string]p2p.Peer),
 	}
 }
 
@@ -39,7 +46,39 @@ func (f *FileServer) Start() error {
 		return err
 	}
 
+	f.bootstrapNetwork()
 	f.loop()
+
+	return nil
+}
+
+func (f *FileServer) Stop() {
+	close(f.quitch)
+}
+
+func (f *FileServer) OnPeer(p p2p.Peer) error {
+	f.peerLock.Lock()
+	defer f.peerLock.Unlock()
+
+	f.peers[p.RemoteAddr().String()] = p
+
+	log.Printf("connected with remote %s\n", p.RemoteAddr())
+
+	return nil
+}
+
+func (f *FileServer) bootstrapNetwork() error {
+	for _, addr := range f.BootstrapNodes {
+		if len(addr) == 0 {
+			continue
+		}
+		go func(addr string) {
+			fmt.Println("attempting to connect with remote: ", addr)
+			if err := f.Transport.Dial(addr); err != nil {
+				log.Println("Dial error:", err)
+			}
+		}(addr)
+	}
 
 	return nil
 }
@@ -57,8 +96,4 @@ func (f *FileServer) loop() {
 			return
 		}
 	}
-}
-
-func (f *FileServer) Stop() {
-	close(f.quitch)
 }

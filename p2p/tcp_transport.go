@@ -3,6 +3,7 @@ package p2p
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"time"
 )
@@ -17,6 +18,18 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 		conn:     conn,
 		outbound: outbound,
 	}
+}
+
+// Send implements the Peer interface
+func (p *TCPPeer) Send(b []byte) error {
+	_, err := p.conn.Write(b)
+
+	return err
+}
+
+// RemoteAddr implements the Peer interface
+func (p *TCPPeer) RemoteAddr() net.Addr {
+	return p.conn.RemoteAddr()
 }
 
 // Close implements the Peer interface
@@ -44,16 +57,7 @@ func NewTCPTransport(opts TCPTransferOpts) *TCPTransport {
 	}
 }
 
-// Consume implements the Transport interface, which will return read-only channel
-// for reading the incoming messages received from another peer in the
-func (t *TCPTransport) Consume() <-chan RPC {
-	return t.rpcCh
-}
-
-func (t *TCPTransport) Close() error {
-	return t.Listener.Close()
-}
-
+// ListenAndAccept implements the Transport interface
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
 	t.Listener, err = net.Listen("tcp", t.ListenAddress)
@@ -62,7 +66,29 @@ func (t *TCPTransport) ListenAndAccept() error {
 		return err
 	}
 	go t.startAcceptLoop()
-	fmt.Printf("TCP transport listening on port %s\n", t.ListenAddress)
+	log.Printf("TCP transport listening on port %s\n", t.ListenAddress)
+	return nil
+}
+
+// Consume implements the Transport interface, which will return read-only channel
+// for reading the incoming messages received from another peer in the
+func (t *TCPTransport) Consume() <-chan RPC {
+	return t.rpcCh
+}
+
+// Close implements the Transport interface
+func (t *TCPTransport) Close() error {
+	return t.Listener.Close()
+}
+
+// Dial implements the Transport interface which dials to a remote addr of type string
+func (t *TCPTransport) Dial(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+
+	if err != nil {
+		return err
+	}
+	log.Println(conn)
 	return nil
 }
 
