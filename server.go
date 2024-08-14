@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 
@@ -20,8 +23,9 @@ type FileServer struct {
 
 	peerLock sync.Mutex
 	peers    map[string]p2p.Peer
-	store    *Store
-	quitch   chan struct{}
+
+	store  *Store
+	quitch chan struct{}
 }
 
 func NewServer(opts FileServerOpts) *FileServer {
@@ -60,11 +64,59 @@ func (f *FileServer) OnPeer(p p2p.Peer) error {
 	f.peerLock.Lock()
 	defer f.peerLock.Unlock()
 
-	f.peers[p.RemoteAddr().String()] = p
-
-	log.Printf("connected with remote %s\n", p.RemoteAddr())
+	addr := p.RemoteAddr().String()
+	f.peers[addr] = p
+	log.Printf("Peer added: %s. Total peers: %d", addr, len(f.peers))
 
 	return nil
+}
+
+type Message struct {
+	From    string
+	Payload any
+}
+
+type DataMessage struct {
+	Key  string
+	Data []byte
+}
+
+func (f *FileServer) StoreData(key string, r io.Reader) error {
+	// 1. Store this file to disk
+	// 2. Broadcast this file to all the known peers in the network
+
+	buf := new(bytes.Buffer)
+	tee := io.TeeReader(r, buf)
+
+	if err := f.store.Write(key, tee); err != nil {
+		return err
+	}
+
+	p := &DataMessage{
+		Key:  key,
+		Data: buf.Bytes(),
+	}
+
+	return f.broadcast(&Message{
+		From:    "todo",
+		Payload: p,
+	})
+}
+
+func (f *FileServer) broadcast(msg *Message) error {
+	log.Printf("Broadcasting to %d peers", len(f.peers))
+
+	peers := []io.Writer{}
+	for _, peer := range f.peers {
+		peers = append(peers, peer)
+	}
+
+	if len(peers) == 0 {
+		return fmt.Errorf("no peers to broadcast to")
+	}
+
+	mw := io.MultiWriter(peers...)
+	return gob.NewEncoder(mw).Encode(msg)
 }
 
 func (f *FileServer) bootstrapNetwork() error {
@@ -91,9 +143,24 @@ func (f *FileServer) loop() {
 	for {
 		select {
 		case msg := <-f.Transport.Consume():
-			log.Println(string(msg.Payload))
+			var m Message
+			if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&m); err != nil {
+				log.Println(err)
+			}
+			if err := f.handleMessage(&m); err != nil {
+				log.Println(err)
+			}
 		case <-f.quitch:
 			return
 		}
 	}
+}
+
+func (f *FileServer) handleMessage(msg *Message) error {
+	switch v := msg.Payload.(type) {
+	case *DataMessage:
+		fmt.Printf("Received data %s\n", v)
+	}
+
+	return nil
 }

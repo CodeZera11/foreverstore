@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"log"
+	"time"
 
 	"github.com/codezera11/foreverstore/p2p"
 )
@@ -33,13 +35,22 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 
 func main() {
 
-	s1 := makeServer(":3000")
+	s1 := makeServer(":3000", "")
 	s2 := makeServer(":4000", ":3000")
 
 	go func() {
 		log.Fatal(s1.Start())
 	}()
 
-	s2.Start()
+	time.Sleep(time.Second * 2)
 
+	go s2.Start()
+
+	time.Sleep(time.Second * 3)
+
+	data := bytes.NewReader([]byte("make me some bytes!"))
+
+	s2.StoreData("myprivatekey", data)
+
+	select {}
 }
