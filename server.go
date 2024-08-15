@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/codezera11/foreverstore/p2p"
 )
@@ -82,25 +83,49 @@ type DataMessage struct {
 }
 
 func (f *FileServer) StoreData(key string, r io.Reader) error {
-	// 1. Store this file to disk
-	// 2. Broadcast this file to all the known peers in the network
 
 	buf := new(bytes.Buffer)
-	tee := io.TeeReader(r, buf)
+	msg := Message{
+		Payload: []byte("storagekey"),
+	}
 
-	if err := f.store.Write(key, tee); err != nil {
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
 		return err
 	}
 
-	p := &DataMessage{
-		Key:  key,
-		Data: buf.Bytes(),
+	for _, peer := range f.peers {
+		if err := peer.Send(buf.Bytes()); err != nil {
+			return err
+		}
 	}
 
-	return f.broadcast(&Message{
-		From:    "todo",
-		Payload: p,
-	})
+	time.Sleep(time.Second * 3)
+
+	payload := []byte("THIS IS A LARGE FILE")
+	for _, peer := range f.peers {
+		if err := peer.Send(payload); err != nil {
+			return err
+		}
+	}
+
+	return nil
+
+	// buf := new(bytes.Buffer)
+	// tee := io.TeeReader(r, buf)
+
+	// if err := f.store.Write(key, tee); err != nil {
+	// 	return err
+	// }
+
+	// p := &DataMessage{
+	// 	Key:  key,
+	// 	Data: buf.Bytes(),
+	// }
+
+	// return f.broadcast(&Message{
+	// 	From:    "todo",
+	// 	Payload: p,
+	// })
 }
 
 func (f *FileServer) broadcast(msg *Message) error {
@@ -147,9 +172,22 @@ func (f *FileServer) loop() {
 			if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&m); err != nil {
 				log.Println(err)
 			}
-			if err := f.handleMessage(&m); err != nil {
-				log.Println(err)
+			fmt.Println("recd key:", string(m.Payload.([]byte)))
+
+			peer, ok := f.peers[msg.From]
+			if !ok {
+				panic("peer not found in the peer map!")
 			}
+
+			b := make([]byte, 1000)
+			if _, err := peer.Read(b); err != nil {
+				panic(err)
+			}
+
+			fmt.Println("recd file:", string(b))
+
+			peer.(*p2p.TCPPeer).Wg.Done()
+
 		case <-f.quitch:
 			return
 		}
