@@ -48,7 +48,7 @@ func main() {
 
 	time.Sleep(time.Second * 3)
 
-	data := bytes.NewReader([]byte("make me some bytes!"))
+	data := bytes.NewReader([]byte("This is some beefy file!"))
 
 	s2.StoreData("myprivatekey", data)
 
