@@ -160,6 +160,5 @@ func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 		return 0, err
 	}
 
-	fmt.Printf("Written %v bytes to file %v\n", n, fullPath)
 	return n, nil
 }

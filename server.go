@@ -91,8 +91,10 @@ type DataMessage struct {
 
 func (f *FileServer) StoreData(key string, r io.Reader) error {
 
-	buf := new(bytes.Buffer)
-	tee := io.TeeReader(r, buf)
+	var (
+		fileBuffer = new(bytes.Buffer)
+		tee        = io.TeeReader(r, fileBuffer)
+	)
 
 	size, err := f.store.Write(key, tee)
 
@@ -118,10 +120,10 @@ func (f *FileServer) StoreData(key string, r io.Reader) error {
 		}
 	}
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 1)
 
 	for _, peer := range f.peers {
-		n, err := io.Copy(peer, buf)
+		n, err := io.Copy(peer, fileBuffer)
 		if err != nil {
 			return err
 		}
@@ -205,11 +207,13 @@ func (f *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 		return fmt.Errorf("peer %s not found in the peer map", from)
 	}
 
-	_, err := f.store.Write(msg.Key, peer)
+	n, err := f.store.Write(msg.Key, peer)
 
 	if err != nil {
 		return nil
 	}
+
+	fmt.Printf("Written %v bytes to disk\n", n)
 
 	peer.(*p2p.TCPPeer).Wg.Done()
 
