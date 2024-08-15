@@ -49,6 +49,12 @@ func NewTCPTransport(opts TCPTransferOpts) *TCPTransport {
 	}
 }
 
+// Addr implements the transport interface and returns the listening address
+// transport is accepting on.
+func (t *TCPTransport) Addr() string {
+	return t.ListenAddress
+}
+
 // ListenAndAccept implements the Transport interface
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
@@ -123,18 +129,22 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 	}
 
 	// Read loop
-	rpc := RPC{}
 	for {
+		rpc := RPC{}
 		err = t.Decoder.Decode(conn, &rpc)
 		if err != nil {
 			fmt.Printf("TCP decoding error: %v\n", err)
 		}
 
 		rpc.From = conn.RemoteAddr().String()
-		peer.Wg.Add(1)
-		fmt.Println("waiting till stream is done")
+
+		if rpc.Stream {
+			peer.Wg.Add(1)
+			fmt.Printf("[%s] incoming stream, waiting...\n", conn.RemoteAddr())
+			peer.Wg.Wait()
+			fmt.Printf("[%s] stream close, resuming read loop\n", conn.RemoteAddr())
+			continue
+		}
 		t.rpcCh <- rpc
-		peer.Wg.Wait()
-		fmt.Println("stream done continuing normal read loop")
 	}
 }
